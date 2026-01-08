@@ -1,8 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
-import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Task {
@@ -14,7 +12,6 @@ interface Task {
 }
 
 export default function DashboardPage() {
-  const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -22,9 +19,9 @@ export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
   const [darkMode, setDarkMode] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [filterView, setFilterView] = useState<'all' | 'active' | 'completed'>('all');
 
   useEffect(() => {
-    // Check saved theme preference
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark') {
       setDarkMode(true);
@@ -34,16 +31,18 @@ export default function DashboardPage() {
     const token = localStorage.getItem('token');
     const userData = localStorage.getItem('user');
     
-    if (!token) {
-      router.push('/');
-      return;
-    }
-    
     if (userData) {
       setUser(JSON.parse(userData));
     }
     
-    loadTasks(token);
+    // Simulate loading
+    setTimeout(() => {
+      setTasks([
+        { id: 1, title: 'Complete project proposal', description: 'Write detailed proposal for Q1', completed: false, created_at: new Date().toISOString() },
+        { id: 2, title: 'Team meeting', description: 'Discuss sprint planning', completed: true, created_at: new Date().toISOString() },
+      ]);
+      setLoading(false);
+    }, 1000);
   }, []);
 
   const toggleDarkMode = () => {
@@ -57,137 +56,93 @@ export default function DashboardPage() {
     }
   };
 
-  const loadTasks = async (token: string) => {
-    try {
-      const data = await api.getTasks(token);
-      setTasks(data);
-    } catch (error: any) {
-      if (error.message.includes('Failed to fetch')) {
-        localStorage.clear();
-        router.push('/');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAddTask = async (e: React.FormEvent) => {
+  const handleAddTask = (e: React.FormEvent) => {
     e.preventDefault();
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    try {
-      await api.createTask(token, newTask);
-      setNewTask({ title: '', description: '' });
-      setShowAddModal(false);
-      loadTasks(token);
-    } catch (error: any) {
-      alert('Failed to create task: ' + error.message);
-    }
+    const newTaskObj = {
+      id: Date.now(),
+      ...newTask,
+      completed: false,
+      created_at: new Date().toISOString()
+    };
+    setTasks([...tasks, newTaskObj]);
+    setNewTask({ title: '', description: '' });
+    setShowAddModal(false);
   };
 
-  const handleToggleComplete = async (task: Task) => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    try {
-      await api.updateTask(token, task.id, { completed: !task.completed });
-      
-      // Show confetti when completing task
-      if (!task.completed) {
-        setShowConfetti(true);
-        setTimeout(() => setShowConfetti(false), 3000);
-      }
-      
-      loadTasks(token);
-    } catch (error) {
-      alert('Failed to update task');
+  const handleToggleComplete = (task: Task) => {
+    if (!task.completed) {
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 3000);
     }
+    setTasks(tasks.map(t => t.id === task.id ? { ...t, completed: !t.completed } : t));
   };
 
-  const handleDeleteTask = async (id: number) => {
-    if (!confirm('Delete this task?')) return;
-    
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    try {
-      await api.deleteTask(token, id);
-      loadTasks(token);
-    } catch (error) {
-      alert('Failed to delete task');
+  const handleDeleteTask = (id: number) => {
+    if (confirm('Delete this task?')) {
+      setTasks(tasks.filter(t => t.id !== id));
     }
   };
 
   const handleLogout = () => {
     localStorage.clear();
-    router.push('/');
+    window.location.href = '/';
   };
+
+  const filteredTasks = tasks.filter(task => {
+    if (filterView === 'active') return !task.completed;
+    if (filterView === 'completed') return task.completed;
+    return true;
+  });
+
+  const completedCount = tasks.filter(t => t.completed).length;
+  const pendingCount = tasks.length - completedCount;
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-600 via-purple-600 to-pink-500 flex items-center justify-center">
+      <div className={`min-h-screen flex items-center justify-center ${darkMode ? 'bg-slate-950' : 'bg-gray-50'}`}>
         <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
           className="text-center"
         >
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            className="relative mx-auto mb-6"
-          >
-            <div className="w-20 h-20 border-t-4 border-b-4 border-white rounded-full"></div>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-3xl">📝</span>
-            </div>
-          </motion.div>
-          <motion.p
-            animate={{ opacity: [0.5, 1, 0.5] }}
-            transition={{ duration: 1.5, repeat: Infinity }}
-            className="text-white font-medium text-lg"
-          >
-            Loading your tasks...
-          </motion.p>
+            className={`w-16 h-16 border-4 border-t-violet-500 rounded-full mx-auto mb-4 ${
+              darkMode ? 'border-slate-800' : 'border-gray-200'
+            }`}
+          />
+          <p className={`font-medium ${darkMode ? 'text-slate-400' : 'text-gray-600'}`}>
+            Loading your workspace...
+          </p>
         </motion.div>
       </div>
     );
   }
 
-  const completedCount = tasks.filter(t => t.completed).length;
-  const pendingCount = tasks.length - completedCount;
-  const completionRate = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
-
   return (
-    <div className={`min-h-screen transition-colors duration-500 ${
-      darkMode 
-        ? 'bg-gradient-to-br from-gray-900 via-purple-900 to-violet-900' 
-        : 'bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50'
+    <div className={`min-h-screen transition-all duration-300 ${
+      darkMode ? 'bg-slate-950' : 'bg-gray-50'
     }`}>
-      {/* Confetti Animation */}
+      {/* Confetti */}
       <AnimatePresence>
         {showConfetti && (
           <div className="fixed inset-0 pointer-events-none z-50">
-            {[...Array(50)].map((_, i) => (
+            {[...Array(30)].map((_, i) => (
               <motion.div
                 key={i}
-                initial={{ 
-                  x: Math.random() * window.innerWidth, 
-                  y: -20,
-                  rotate: 0 
-                }}
+                initial={{ x: '50vw', y: -20, scale: 0, rotate: 0 }}
                 animate={{ 
-                  y: window.innerHeight + 100, 
-                  rotate: 360,
-                  x: Math.random() * window.innerWidth
+                  x: Math.random() * window.innerWidth,
+                  y: window.innerHeight + 50,
+                  scale: [0, 1, 1, 0],
+                  rotate: Math.random() * 720
                 }}
-                transition={{ 
-                  duration: 2 + Math.random() * 2, 
-                  ease: "easeOut" 
-                }}
-                className="absolute w-3 h-3 rounded-full"
-                style={{
-                  backgroundColor: ['#ff0080', '#7928ca', '#0070f3', '#00ff88'][Math.floor(Math.random() * 4)]
+                transition={{ duration: 2 + Math.random(), ease: "easeOut" }}
+                className="absolute w-2 h-2"
+                style={{ 
+                  backgroundColor: ['#8b5cf6', '#ec4899', '#3b82f6', '#10b981'][i % 4],
+                  borderRadius: Math.random() > 0.5 ? '50%' : '0%'
                 }}
               />
             ))}
@@ -195,269 +150,244 @@ export default function DashboardPage() {
         )}
       </AnimatePresence>
 
-      {/* Header */}
-      <motion.header
-        initial={{ y: -100 }}
-        animate={{ y: 0 }}
-        className={`backdrop-blur-lg border-b sticky top-0 z-40 shadow-lg transition-colors duration-500 ${
+      {/* Top Navigation */}
+      <motion.nav
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className={`sticky top-0 z-40 border-b backdrop-blur-xl ${
           darkMode 
-            ? 'bg-gray-900/80 border-gray-700' 
-            : 'bg-white/80 border-gray-200'
+            ? 'bg-slate-950/90 border-slate-800' 
+            : 'bg-white/90 border-gray-200'
         }`}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
             <motion.div 
-              className="flex items-center space-x-4"
-              whileHover={{ scale: 1.02 }}
+              whileHover={{ rotate: 180 }}
+              transition={{ duration: 0.3 }}
+              className="w-9 h-9 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-lg flex items-center justify-center"
             >
-              <motion.div 
-                className="bg-gradient-to-br from-blue-600 to-purple-600 p-3 rounded-xl shadow-lg"
-                whileHover={{ rotate: 360 }}
-                transition={{ duration: 0.5 }}
-              >
-                <span className="text-2xl">📝</span>
-              </motion.div>
-              <div>
-                <h1 className={`text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent`}>
-                  My Tasks
-                </h1>
-                {user && (
-                  <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Welcome back, {user.username}!
-                  </p>
-                )}
-              </div>
+              <span className="text-white text-lg font-bold">T</span>
             </motion.div>
-            
-            <div className="flex items-center space-x-4">
-              {/* Dark Mode Toggle */}
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={toggleDarkMode}
-                className={`p-3 rounded-xl transition-all ${
-                  darkMode 
-                    ? 'bg-yellow-500 text-gray-900' 
-                    : 'bg-gray-800 text-yellow-400'
-                }`}
-              >
-                {darkMode ? '☀️' : '🌙'}
-              </motion.button>
+            <span className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+              TaskManager
+            </span>
+          </div>
 
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={handleLogout}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                  darkMode 
-                    ? 'text-red-400 hover:bg-red-500/10' 
-                    : 'text-red-600 hover:bg-red-50'
-                }`}
-              >
-                <span>Logout</span>
-              </motion.button>
-            </div>
+          <div className="flex items-center gap-3">
+            {user && (
+              <div className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+                darkMode ? 'bg-slate-800 text-slate-300' : 'bg-gray-100 text-gray-700'
+              }`}>
+                {user.username}
+              </div>
+            )}
+            
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={toggleDarkMode}
+              className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                darkMode ? 'bg-slate-800 text-yellow-400' : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              {darkMode ? '☀️' : '🌙'}
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleLogout}
+              className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                darkMode 
+                  ? 'text-red-400 hover:bg-red-500/10' 
+                  : 'text-red-600 hover:bg-red-50'
+              }`}
+            >
+              Logout
+            </motion.button>
           </div>
         </div>
-      </motion.header>
+      </motion.nav>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Header Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8"
+        >
+          <h1 className={`text-4xl font-bold mb-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+            Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'}
+          </h1>
+          <p className={`text-lg ${darkMode ? 'text-slate-400' : 'text-gray-600'}`}>
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          </p>
+        </motion.div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           {[
-            { label: 'Total', value: tasks.length, icon: '📊', color: 'from-blue-500 to-cyan-500' },
-            { label: 'Pending', value: pendingCount, icon: '⏳', color: 'from-orange-500 to-pink-500' },
-            { label: 'Completed', value: completedCount, icon: '✅', color: 'from-green-500 to-emerald-500' },
-            { label: 'Progress', value: `${completionRate}%`, icon: '📈', color: 'from-purple-500 to-indigo-500' }
-          ].map((stat, index) => (
+            { label: 'Total Tasks', value: tasks.length, icon: '📊', bg: darkMode ? 'bg-blue-500/10 border-blue-500/20' : 'bg-blue-50 border-blue-200', text: darkMode ? 'text-blue-400' : 'text-blue-600' },
+            { label: 'Active', value: pendingCount, icon: '🔥', bg: darkMode ? 'bg-orange-500/10 border-orange-500/20' : 'bg-orange-50 border-orange-200', text: darkMode ? 'text-orange-400' : 'text-orange-600' },
+            { label: 'Completed', value: completedCount, icon: '✓', bg: darkMode ? 'bg-green-500/10 border-green-500/20' : 'bg-green-50 border-green-200', text: darkMode ? 'text-green-400' : 'text-green-600' }
+          ].map((stat, i) => (
             <motion.div
               key={stat.label}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              whileHover={{ scale: 1.05, y: -5 }}
-              className={`bg-gradient-to-br ${stat.color} rounded-2xl p-6 shadow-xl text-white relative overflow-hidden`}
+              transition={{ delay: i * 0.1 }}
+              whileHover={{ y: -2 }}
+              className={`p-5 rounded-2xl border ${stat.bg}`}
             >
-              <motion.div
-                className="absolute -right-4 -top-4 text-6xl opacity-20"
-                animate={{ rotate: [0, 10, 0] }}
-                transition={{ duration: 3, repeat: Infinity }}
-              >
-                {stat.icon}
-              </motion.div>
-              <div className="relative z-10">
-                <p className="text-sm font-medium text-white/90 mb-1">{stat.label}</p>
-                <motion.p 
-                  className="text-4xl font-bold"
-                  key={stat.value}
-                  initial={{ scale: 1.5, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                >
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-2xl">{stat.icon}</span>
+                <span className={`text-3xl font-bold ${stat.text}`}>
                   {stat.value}
-                </motion.p>
+                </span>
               </div>
+              <p className={`text-sm font-medium ${darkMode ? 'text-slate-400' : 'text-gray-600'}`}>
+                {stat.label}
+              </p>
             </motion.div>
           ))}
         </div>
 
-        {/* Add Task Button - Floating */}
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => setShowAddModal(true)}
-          className="w-full bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white py-5 rounded-2xl font-semibold shadow-2xl mb-8 flex items-center justify-center space-x-3 text-lg group relative overflow-hidden"
-        >
-          <motion.div
-            className="absolute inset-0 bg-white"
-            initial={{ x: '-100%' }}
-            whileHover={{ x: '100%' }}
-            transition={{ duration: 0.5 }}
-            style={{ opacity: 0.1 }}
-          />
-          <motion.span
-            animate={{ rotate: [0, 90, 0] }}
-            transition={{ duration: 2, repeat: Infinity }}
+        {/* Filter Tabs + Add Button */}
+        <div className="flex items-center justify-between mb-6">
+          <div className={`inline-flex rounded-xl p-1 ${
+            darkMode ? 'bg-slate-900 border border-slate-800' : 'bg-gray-100 border border-gray-200'
+          }`}>
+            {(['all', 'active', 'completed'] as const).map(view => (
+              <motion.button
+                key={view}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setFilterView(view)}
+                className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
+                  filterView === view
+                    ? darkMode
+                      ? 'bg-violet-500 text-white shadow-lg'
+                      : 'bg-white text-gray-900 shadow-md'
+                    : darkMode
+                      ? 'text-slate-400 hover:text-slate-300'
+                      : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {view.charAt(0).toUpperCase() + view.slice(1)}
+              </motion.button>
+            ))}
+          </div>
+
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => setShowAddModal(true)}
+            className="px-6 py-2.5 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white rounded-xl font-medium shadow-lg flex items-center gap-2"
           >
-            ➕
-          </motion.span>
-          <span>Add New Task</span>
-        </motion.button>
+            <span className="text-lg">+</span>
+            <span>New Task</span>
+          </motion.button>
+        </div>
 
         {/* Tasks List */}
         <AnimatePresence mode="popLayout">
-          {tasks.length === 0 ? (
+          {filteredTasks.length === 0 ? (
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
+              initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className={`rounded-2xl p-16 text-center border-2 border-dashed ${
-                darkMode ? 'bg-gray-800/50 border-gray-700' : 'bg-white border-gray-300'
+              exit={{ opacity: 0, scale: 0.95 }}
+              className={`py-20 text-center rounded-2xl border-2 border-dashed ${
+                darkMode ? 'border-slate-800 bg-slate-900/30' : 'border-gray-300 bg-gray-50'
               }`}
             >
-              <motion.div
-                animate={{ 
-                  y: [0, -10, 0],
-                  rotate: [0, 5, -5, 0]
-                }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="bg-gradient-to-br from-blue-100 to-purple-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6"
-              >
-                <span className="text-5xl">📭</span>
-              </motion.div>
-              <h3 className={`text-2xl font-bold mb-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                No tasks yet!
+              <div className="text-5xl mb-3">📝</div>
+              <h3 className={`text-xl font-semibold mb-1 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                No tasks {filterView !== 'all' && filterView}
               </h3>
-              <p className={`mb-6 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                Start organizing your day by adding your first task
+              <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-gray-500'}`}>
+                {filterView === 'all' ? 'Create your first task to get started' : `You don't have any ${filterView} tasks`}
               </p>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setShowAddModal(true)}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-xl font-medium shadow-lg"
-              >
-                Create Your First Task
-              </motion.button>
             </motion.div>
           ) : (
-            <div className="space-y-4">
-              {tasks.map((task, index) => (
+            <div className="space-y-3">
+              {filteredTasks.map((task, index) => (
                 <motion.div
                   key={task.id}
+                  layout
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 20 }}
-                  transition={{ delay: index * 0.05 }}
-                  whileHover={{ scale: 1.02, x: 10 }}
-                  className={`rounded-2xl p-6 shadow-lg border-l-4 transition-all ${
-                    task.completed 
-                      ? darkMode 
-                        ? 'border-green-500 bg-gray-800/70' 
-                        : 'border-green-500 bg-green-50/50'
+                  transition={{ delay: index * 0.03 }}
+                  whileHover={{ x: 4 }}
+                  className={`group p-4 rounded-xl border transition-all ${
+                    task.completed
+                      ? darkMode
+                        ? 'bg-slate-900/50 border-slate-800'
+                        : 'bg-gray-50 border-gray-200'
                       : darkMode
-                        ? 'border-blue-500 bg-gray-800/50'
-                        : 'border-blue-500 bg-white'
+                        ? 'bg-slate-900 border-slate-800 hover:border-slate-700'
+                        : 'bg-white border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-md'
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start space-x-4 flex-1">
-                      <motion.button
-                        whileHover={{ scale: 1.2, rotate: 360 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => handleToggleComplete(task)}
-                        className={`mt-1 w-8 h-8 rounded-xl border-2 flex items-center justify-center transition-all flex-shrink-0 ${
-                          task.completed
-                            ? 'bg-green-500 border-green-500 shadow-lg shadow-green-200'
-                            : darkMode
-                              ? 'border-gray-600 hover:border-blue-500 hover:bg-blue-500/10'
-                              : 'border-gray-300 hover:border-blue-500 hover:bg-blue-50'
-                        }`}
-                      >
-                        <AnimatePresence>
-                          {task.completed && (
-                            <motion.span
-                              initial={{ scale: 0, rotate: -180 }}
-                              animate={{ scale: 1, rotate: 0 }}
-                              exit={{ scale: 0, rotate: 180 }}
-                              className="text-white text-xl"
-                            >
-                              ✓
-                            </motion.span>
-                          )}
-                        </AnimatePresence>
-                      </motion.button>
-                      
-                      <div className="flex-1 min-w-0">
-                        <h3 className={`text-lg font-semibold mb-1 ${
-                          task.completed 
-                            ? darkMode ? 'text-gray-500 line-through' : 'text-gray-400 line-through'
-                            : darkMode ? 'text-white' : 'text-gray-900'
-                        }`}>
-                          {task.title}
-                        </h3>
-                        {task.description && (
-                          <p className={`text-sm mb-2 leading-relaxed ${
-                            darkMode ? 'text-gray-400' : 'text-gray-600'
-                          }`}>
-                            {task.description}
-                          </p>
-                        )}
-                        <div className="flex items-center space-x-3 text-xs">
-                          <span className={`flex items-center space-x-1 ${
-                            darkMode ? 'text-gray-500' : 'text-gray-500'
-                          }`}>
-                            <span>📅</span>
-                            <span>{new Date(task.created_at).toLocaleDateString('en-US', { 
-                              month: 'short', day: 'numeric', year: 'numeric' 
-                            })}</span>
-                          </span>
-                          {task.completed && (
-                            <motion.span
-                              initial={{ scale: 0 }}
-                              animate={{ scale: 1 }}
-                              className="bg-green-100 text-green-700 px-3 py-1 rounded-full font-medium"
-                            >
-                              ✓ Done
-                            </motion.span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    
+                  <div className="flex items-start gap-3">
                     <motion.button
-                      whileHover={{ scale: 1.2, rotate: 10 }}
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => handleToggleComplete(task)}
+                      className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                        task.completed
+                          ? 'bg-violet-500 border-violet-500'
+                          : darkMode
+                            ? 'border-slate-600 hover:border-violet-500'
+                            : 'border-gray-300 hover:border-violet-500'
+                      }`}
+                    >
+                      {task.completed && (
+                        <motion.svg
+                          initial={{ scale: 0, rotate: -90 }}
+                          animate={{ scale: 1, rotate: 0 }}
+                          className="w-3 h-3 text-white"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={3}
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </motion.svg>
+                      )}
+                    </motion.button>
+
+                    <div className="flex-1 min-w-0">
+                      <h3 className={`font-semibold mb-0.5 ${
+                        task.completed
+                          ? darkMode ? 'text-slate-500 line-through' : 'text-gray-400 line-through'
+                          : darkMode ? 'text-white' : 'text-gray-900'
+                      }`}>
+                        {task.title}
+                      </h3>
+                      {task.description && (
+                        <p className={`text-sm ${darkMode ? 'text-slate-400' : 'text-gray-600'}`}>
+                          {task.description}
+                        </p>
+                      )}
+                      <p className={`text-xs mt-1 ${darkMode ? 'text-slate-500' : 'text-gray-400'}`}>
+                        {new Date(task.created_at).toLocaleDateString('en-US', { 
+                          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.9 }}
                       onClick={() => handleDeleteTask(task.id)}
-                      className={`p-2 rounded-lg transition-all flex-shrink-0 ${
-                        darkMode 
-                          ? 'text-red-400 hover:bg-red-500/10' 
-                          : 'text-red-500 hover:bg-red-50'
+                      className={`opacity-0 group-hover:opacity-100 p-1.5 rounded-lg transition-all ${
+                        darkMode ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-gray-100 text-gray-500'
                       }`}
-                      title="Delete task"
                     >
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
                     </motion.button>
                   </div>
@@ -475,100 +405,91 @@ export default function DashboardPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50"
             onClick={() => setShowAddModal(false)}
           >
             <motion.div
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className={`rounded-3xl p-8 max-w-lg w-full shadow-2xl ${
-                darkMode ? 'bg-gray-800' : 'bg-white'
+              className={`rounded-2xl p-6 max-w-md w-full ${
+                darkMode ? 'bg-slate-900 border border-slate-800' : 'bg-white'
               }`}
             >
-              <div className="flex items-center justify-between mb-6">
-                <h2 className={`text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent`}>
-                  Add New Task
+              <div className="flex items-center justify-between mb-5">
+                <h2 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                  Create Task
                 </h2>
                 <motion.button
-                  whileHover={{ scale: 1.1, rotate: 90 }}
-                  whileTap={{ scale: 0.9 }}
+                  whileHover={{ rotate: 90 }}
                   onClick={() => setShowAddModal(false)}
-                  className={`p-2 rounded-full transition-all ${
-                    darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-                  }`}
+                  className={`p-1.5 rounded-lg ${darkMode ? 'hover:bg-slate-800' : 'hover:bg-gray-100'}`}
                 >
-                  <svg className={`w-6 h-6 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <svg className={`w-5 h-5 ${darkMode ? 'text-slate-400' : 'text-gray-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </motion.button>
               </div>
-              
-              <form onSubmit={handleAddTask} className="space-y-5">
+
+              <div className="space-y-4">
                 <div>
-                  <label className={`block text-sm font-semibold mb-2 ${
-                    darkMode ? 'text-gray-300' : 'text-gray-700'
-                  }`}>
-                    Task Title *
+                  <label className={`block text-sm font-medium mb-1.5 ${darkMode ? 'text-slate-300' : 'text-gray-700'}`}>
+                    Title
                   </label>
                   <input
                     type="text"
                     required
                     value={newTask.title}
                     onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                    className={`w-full px-4 py-3 rounded-xl border-2 outline-none transition-all ${
+                    className={`w-full px-4 py-2.5 rounded-xl border outline-none transition-all ${
                       darkMode 
-                        ? 'bg-gray-700 border-gray-600 text-white focus:border-blue-500' 
-                        : 'bg-white border-gray-200 text-gray-900 focus:border-blue-500'
+                        ? 'bg-slate-800 border-slate-700 text-white focus:border-violet-500'
+                        : 'bg-white border-gray-200 focus:border-violet-500'
                     }`}
-                    placeholder="e.g., Buy groceries, Finish report..."
+                    placeholder="Enter task title..."
                   />
                 </div>
-                
+
                 <div>
-                  <label className={`block text-sm font-semibold mb-2 ${
-                    darkMode ? 'text-gray-300' : 'text-gray-700'
-                  }`}>
-                    Description (Optional)
+                  <label className={`block text-sm font-medium mb-1.5 ${darkMode ? 'text-slate-300' : 'text-gray-700'}`}>
+                    Description
                   </label>
                   <textarea
                     value={newTask.description}
                     onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                    className={`w-full px-4 py-3 rounded-xl border-2 outline-none transition-all resize-none ${
+                    className={`w-full px-4 py-2.5 rounded-xl border outline-none transition-all resize-none ${
                       darkMode 
-                        ? 'bg-gray-700 border-gray-600 text-white focus:border-blue-500' 
-                        : 'bg-white border-gray-200 text-gray-900 focus:border-blue-500'
+                        ? 'bg-slate-800 border-slate-700 text-white focus:border-violet-500'
+                        : 'bg-white border-gray-200 focus:border-violet-500'
                     }`}
-                    rows={4}
-                    placeholder="Add any additional details..."
+                    rows={3}
+                    placeholder="Add details (optional)..."
                   />
                 </div>
-                
-                <div className="flex space-x-3 pt-2">
+
+                <div className="flex gap-3 pt-2">
                   <motion.button
                     type="button"
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setShowAddModal(false)}
-                    className={`flex-1 px-6 py-3 rounded-xl font-semibold transition-all ${
-                      darkMode 
-                        ? 'bg-gray-700 text-white hover:bg-gray-600' 
-                        : 'border-2 border-gray-300 text-gray-700 hover:bg-gray-50'
+                    className={`flex-1 px-4 py-2.5 rounded-xl font-medium ${
+                      darkMode ? 'bg-slate-800 text-white' : 'bg-gray-100 text-gray-700'
                     }`}
                   >
                     Cancel
                   </motion.button>
                   <motion.button
-                    type="submit"
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all"
+                    onClick={handleAddTask}
+                    className="flex-1 px-4 py-2.5 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white rounded-xl font-medium"
                   >
-                    Add Task
+                    Create
                   </motion.button>
                 </div>
-              </form>
+              </div>
             </motion.div>
           </motion.div>
         )}
