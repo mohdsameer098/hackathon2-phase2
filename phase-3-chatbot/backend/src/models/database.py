@@ -5,17 +5,29 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 
-# Get database URL from environment
+# Get database URL from environment with SQLite fallback
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./todo.db")
 
-# SQLAlchemy setup
-if DATABASE_URL.startswith("sqlite"):
-    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-    print("📁 Using SQLite database")
-else:
-    # PostgreSQL/Neon connection
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-    print("🐘 Using PostgreSQL (Neon) database")
+# Try to connect, fallback to SQLite if connection fails
+def create_db_engine(database_url):
+    if database_url.startswith("sqlite"):
+        print("📁 Using SQLite database")
+        return create_engine(database_url, connect_args={"check_same_thread": False})
+    else:
+        try:
+            # PostgreSQL/Neon connection
+            print("🐘 Attempting PostgreSQL (Neon) connection...")
+            engine = create_engine(database_url, pool_pre_ping=True)
+            # Test the connection
+            with engine.connect() as conn:
+                print("✅ PostgreSQL connection successful!")
+            return engine
+        except Exception as e:
+            print(f"⚠️  PostgreSQL connection failed: {e}")
+            print("📁 Falling back to SQLite database")
+            return create_engine("sqlite:///./todo.db", connect_args={"check_same_thread": False})
+
+engine = create_db_engine(DATABASE_URL)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
